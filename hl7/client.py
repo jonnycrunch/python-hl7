@@ -1,3 +1,5 @@
+from typing import Union, Iterable, TextIO, BinaryIO
+from .containers import Message
 import io
 import os.path
 import socket
@@ -42,22 +44,22 @@ class MLLPClient(object):
     .. [#] http://wiki.hl7.org/index.php?title=Character_Set_used_in_v2_messages
     """
 
-    def __init__(self, host, port, encoding="utf-8"):
+    def __init__(self, host: str, port: int, encoding: str = "utf-8"):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((host, port))
         self.encoding = encoding
 
-    def __enter__(self):
+    def __enter__(self) -> "MLLPClient":
         return self
 
     def __exit__(self, exc_type, exc_val, trackeback):
         self.close()
 
-    def close(self):
+    def close(self) -> None:
         """Release the socket connection"""
         self.socket.close()
 
-    def send_message(self, message):
+    def send_message(self, message: Union[bytes, str, Message]) -> bytes:
         """Wraps a byte string, unicode string, or :py:class:`hl7.Message`
         in a MLLP container and send the message to the server
 
@@ -79,7 +81,7 @@ class MLLPClient(object):
         data = SB + binary + EB + CR
         return self.send(data)
 
-    def send(self, data):
+    def send(self, data: bytes) -> bytes:
         """Low-level, direct access to the socket.send (data must be already
         wrapped in an MLLP container).  Blocks until the server returns.
         """
@@ -90,28 +92,24 @@ class MLLPClient(object):
 
 
 # wrappers to make testing easier
-def stdout(content):
+def stdout(content: Union[bytes, str]) -> None:
     # In Python 3, can't write bytes via sys.stdout.write
     #   http://bugs.python.org/issue18512
     if isinstance(content, bytes):
-        out = sys.stdout.buffer
-        newline = b"\n"
+        sys.stdout.buffer.write(content + b"\n")
     else:
-        out = sys.stdout
-        newline = "\n"
-
-    out.write(content + newline)
+        sys.stdout.write(content + "\n")
 
 
-def stdin():
+def stdin() -> TextIO:
     return sys.stdin
 
 
-def stderr():
+def stderr() -> TextIO:
     return sys.stderr
 
 
-def read_stream(stream):
+def read_stream(stream: BinaryIO) -> Iterable[bytes]:
     """Buffer the stream and yield individual, stripped messages"""
     _buffer = b""
 
@@ -134,7 +132,7 @@ def read_stream(stream):
         raise MLLPException("buffer not terminated: %s" % _buffer)
 
 
-def read_loose(stream):
+def read_loose(stream: BinaryIO) -> Iterable[bytes]:
     """Turn a HL7-like blob of text into a real HL7 messages"""
     # look for the START_BLOCK to delineate messages
     START_BLOCK = rb"MSH|^~\&|"
@@ -165,7 +163,7 @@ def read_loose(stream):
         yield START_BLOCK + m
 
 
-def mllp_send():
+def mllp_send() -> None:
     """Command line tool to send messages to an MLLP server"""
     # set up the command line options
     script_name = os.path.basename(sys.argv[0])
@@ -235,7 +233,7 @@ def mllp_send():
         # file into memory before starting to process, which is not required
         # or ideal, since we can handle a stream
         with open(options.filename, "rb") as f:
-            stream = io.BytesIO(f.read())
+            stream: Union[BinaryIO, TextIO] = io.BytesIO(f.read())
     else:
         if options.loose:
             stderr().write("--loose requires --file\n")
